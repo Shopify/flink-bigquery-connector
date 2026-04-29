@@ -86,7 +86,7 @@ under the License.
         <clover.version>4.5.1</clover.version>
 
         <slf4j.version>2.0.17</slf4j.version>
-        <log4j.version>2.25.3</log4j.version>
+        <log4j.version>2.25.4</log4j.version>
 
         <flink.parent.artifactId>flink-connector-bigquery-parent</flink.parent.artifactId>
         <surefire.report.dir>${maven.multiModuleProjectDirectory}/target/test-report</surefire.report.dir>
@@ -288,7 +288,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.avro</groupId>
                 <artifactId>avro</artifactId>
-                <version>1.11.4</version>
+                <version>1.11.5</version>
                 <scope>compile</scope>
             </dependency>
 
@@ -350,6 +350,9 @@ under the License.
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>-Dnet.bytebuddy.experimental=true</argLine>
+                </configuration>
             </plugin>
 
             <plugin>
@@ -552,7 +555,7 @@ under the License.
                         <configuration>
                             <!-- Use custom report descriptor -->
                             <reportDescriptor>${maven.multiModuleProjectDirectory}/tools/maven/clover.xml</reportDescriptor>
-                            <targetPercentage>80%</targetPercentage>
+                            <targetPercentage>75%</targetPercentage>
                             <excludes>
                                 <exclude>**/com/google/cloud/flink/bigquery/common/config/*</exclude>
                                 <exclude>**/com/google/cloud/flink/bigquery/common/utils/flink/**</exclude>

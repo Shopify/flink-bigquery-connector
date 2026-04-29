@@ -65,7 +65,13 @@ public class BigQuerySourceEnumerator
             BigQueryReadOptions readOptions, BigQuerySourceEnumState sourceEnumState) {
         switch (this.boundedness) {
             case BOUNDED:
-                return BigQuerySourceSplitAssigner.createBounded(readOptions, sourceEnumState);
+                BigQueryReadOptions optionsWithParallelism =
+                        readOptions
+                                .toBuilder()
+                                .setParallelism(context.currentParallelism())
+                                .build();
+                return BigQuerySourceSplitAssigner.createBounded(
+                        optionsWithParallelism, sourceEnumState);
             default:
                 throw new IllegalArgumentException(
                         "Non supported boundedness: " + this.boundedness);
@@ -90,7 +96,11 @@ public class BigQuerySourceEnumerator
 
     @Override
     public void addSplitsBack(List<BigQuerySourceSplit> splits, int subtaskId) {
-        LOG.debug("BigQuery Source Enumerator adds splits back: {}", splits);
+        LOG.info(
+                "BigQuery Source Enumerator adds {} splits back from subtask {}: {}",
+                splits.size(),
+                subtaskId,
+                splits);
         splitAssigner.addSplitsBack(splits);
     }
 
@@ -130,8 +140,9 @@ public class BigQuerySourceEnumerator
                 LOG.info("Assign split {} to subtask {}", bqSplit, nextAwaiting);
                 break;
             } else if (splitAssigner.noMoreSplits() && boundedness == Boundedness.BOUNDED) {
-                LOG.info("All splits have been assigned");
-                context.registeredReaders().keySet().forEach(context::signalNoMoreSplits);
+                LOG.info("Signal NoMoreSplits to subtask {}", nextAwaiting);
+                context.signalNoMoreSplits(nextAwaiting);
+                awaitingReader.remove();
                 break;
             } else {
                 LOG.info("All splits have been assigned, will check later on.");
