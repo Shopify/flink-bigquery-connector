@@ -1,6 +1,12 @@
 # Release Notes
 
 ## Next
+* Null-check `BigQueryRestriction.convert`'s `FILTERS.get(...)` result so unsupported
+  function definitions (e.g. `COALESCE`, `CASE`, `IF`, `CAST`) inside a pushable
+  position return `Optional.empty()` instead of crashing job planning with a
+  `NullPointerException`. Previously, predicates like `NOT COALESCE(boolean_col, FALSE)`
+  would NPE during planning because the `NOT` case recurses through `convert` and the
+  inner switch unboxed a null `Operation`.
 
 ## 1.1.0 - 2026-02-11
 * PR #260: Upgrade dependencies versions.

@@ -289,6 +289,85 @@ public class BigQueryRestrictionTest {
         assertThat(result).hasValue("city IS NULL");
     }
 
+    // ------------------------------------------------------------------------
+    // Functions that are not in BigQueryRestriction.FILTERS (e.g. COALESCE,
+    // CASE, IF, CAST) must not throw NullPointerException. They must return
+    // Optional.empty() so applyFilters routes the predicate to the remaining-
+    // filters list (applied by a Flink Calc node after the source) instead of
+    // crashing job planning.
+    //
+    // The original regression was reported from the catalog-foundry
+    // `catalog_feed` pipeline with the predicate
+    //   NOT COALESCE(opted_out_of_secondary_channels_catalog, FALSE)
+    // where NOT recurses into convert() and the unmapped COALESCE child
+    // previously caused a NullPointerException during job planning.
+    // ------------------------------------------------------------------------
+
+    @Test
+    public void testUnsupportedTopLevelFunctionReturnsEmpty() {
+        FieldReferenceExpression field = createField("flag", DataTypes.BOOLEAN());
+        ValueLiteralExpression fallback = createLiteral(false, DataTypes.BOOLEAN().notNull());
+
+        Optional<String> result =
+                BigQueryRestriction.convert(
+                        createCallExpression(
+                                "coalesce",
+                                BuiltInFunctionDefinitions.COALESCE,
+                                DataTypes.BOOLEAN(),
+                                field,
+                                fallback));
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    public void testNotOfUnsupportedFunctionReturnsEmpty() {
+        FieldReferenceExpression field = createField("flag", DataTypes.BOOLEAN());
+        ValueLiteralExpression fallback = createLiteral(false, DataTypes.BOOLEAN().notNull());
+        CallExpression coalesceCall =
+                createCallExpression(
+                        "coalesce",
+                        BuiltInFunctionDefinitions.COALESCE,
+                        DataTypes.BOOLEAN(),
+                        field,
+                        fallback);
+
+        Optional<String> result =
+                BigQueryRestriction.convert(
+                        createCallExpression(
+                                "not",
+                                BuiltInFunctionDefinitions.NOT,
+                                DataTypes.BOOLEAN(),
+                                coalesceCall));
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    public void testAndOfSupportedAndUnsupportedReturnsEmpty() {
+        FieldReferenceExpression city = createField("city", DataTypes.STRING());
+        ValueLiteralExpression toronto = createLiteral("Toronto", DataTypes.STRING().notNull());
+        FieldReferenceExpression flag = createField("flag", DataTypes.BOOLEAN());
+        ValueLiteralExpression fallback = createLiteral(false, DataTypes.BOOLEAN().notNull());
+
+        CallExpression supportedSide = createEqualsCallExpression(city, toronto);
+        CallExpression unsupportedSide =
+                createCallExpression(
+                        "coalesce",
+                        BuiltInFunctionDefinitions.COALESCE,
+                        DataTypes.BOOLEAN(),
+                        flag,
+                        fallback);
+
+        Optional<String> result =
+                BigQueryRestriction.convert(
+                        createAndCallExpression(supportedSide, unsupportedSide));
+
+        // The whole AND collapses to empty (mixed pushability is not partially expressible as a
+        // single row restriction); applyFilters then leaves the AND as a remaining Flink filter.
+        assertThat(result).isEmpty();
+    }
+
     private FieldReferenceExpression createField(String name, DataType type) {
         return new FieldReferenceExpression(name, type, 0, 0);
     }
