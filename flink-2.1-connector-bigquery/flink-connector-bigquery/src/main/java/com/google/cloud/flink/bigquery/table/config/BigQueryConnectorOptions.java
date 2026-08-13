@@ -116,6 +116,19 @@ public class BigQueryConnectorOptions {
                                     + " BigQuery can decide for less than this number.");
 
     /**
+     * [OPTIONAL, Read Configuration] Boolean value indicating whether read session creation should
+     * wait until all expected source readers have registered.<br>
+     * Default: false - Create the read session when the source enumerator starts.
+     */
+    public static final ConfigOption<Boolean> WAIT_FOR_ALL_SOURCE_READERS =
+            ConfigOptions.key("read.wait-for-all-source-readers")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Whether the BigQuery read session should wait until all expected "
+                                    + "source readers have registered.");
+
+    /**
      * Read Configuration: Long value indicating the millis since epoch for the underlying table
      * snapshot. Connector would read records from this snapshot instance table. <br>
      * Default: latest snapshot is read.

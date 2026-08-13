@@ -55,6 +55,8 @@ public abstract class BigQueryReadOptions implements Serializable {
 
     public abstract Integer getParallelism();
 
+    public abstract Boolean getWaitForAllSourceReaders();
+
     public abstract BigQueryConnectOptions getBigQueryConnectOptions();
 
     public int getEffectiveMaxStreamCount() {
@@ -89,6 +91,7 @@ public abstract class BigQueryReadOptions implements Serializable {
                 getSnapshotTimestampInMillis(),
                 getMaxStreamCount(),
                 getParallelism(),
+                getWaitForAllSourceReaders(),
                 getBigQueryConnectOptions());
     }
 
@@ -110,6 +113,8 @@ public abstract class BigQueryReadOptions implements Serializable {
                         this.getSnapshotTimestampInMillis(), other.getSnapshotTimestampInMillis())
                 && Objects.equals(this.getMaxStreamCount(), other.getMaxStreamCount())
                 && Objects.equals(this.getParallelism(), other.getParallelism())
+                && Objects.equals(
+                        this.getWaitForAllSourceReaders(), other.getWaitForAllSourceReaders())
                 && Objects.equals(
                         this.getBigQueryConnectOptions(), other.getBigQueryConnectOptions());
     }
@@ -133,6 +138,7 @@ public abstract class BigQueryReadOptions implements Serializable {
                 .setMaxStreamCount(0)
                 .setMaxRecordsPerSplitFetch(10000)
                 .setParallelism(0)
+                .setWaitForAllSourceReaders(false)
                 .setSnapshotTimestampInMillis(null);
     }
 
@@ -201,6 +207,15 @@ public abstract class BigQueryReadOptions implements Serializable {
          * @return This {@link Builder} instance.
          */
         public abstract Builder setParallelism(Integer parallelism);
+
+        /**
+         * Sets whether the source enumerator should wait for all source readers to register before
+         * opening the BigQuery read session.
+         *
+         * @param waitForAllSourceReaders Whether to wait for all source readers before startup.
+         * @return This {@link Builder} instance.
+         */
+        public abstract Builder setWaitForAllSourceReaders(Boolean waitForAllSourceReaders);
 
         /**
          * Sets the {@link BigQueryConnectOptions} instance.

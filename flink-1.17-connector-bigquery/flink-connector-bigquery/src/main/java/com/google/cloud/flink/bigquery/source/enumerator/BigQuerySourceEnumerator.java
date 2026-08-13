@@ -49,6 +49,8 @@ public class BigQuerySourceEnumerator
     private final SplitEnumeratorContext<BigQuerySourceSplit> context;
     private final BigQuerySourceSplitAssigner splitAssigner;
     private final TreeSet<Integer> readersAwaitingSplit;
+    private final boolean waitForAllSourceReaders;
+    private boolean started;
 
     public BigQuerySourceEnumerator(
             Boundedness boundedness,
@@ -59,6 +61,8 @@ public class BigQuerySourceEnumerator
         this.context = context;
         this.splitAssigner = createBigQuerySourceSplitAssigner(readOptions, sourceEnumState);
         this.readersAwaitingSplit = new TreeSet<>();
+        this.waitForAllSourceReaders = readOptions.getWaitForAllSourceReaders();
+        this.started = sourceEnumState.isInitialized();
     }
 
     final BigQuerySourceSplitAssigner createBigQuerySourceSplitAssigner(
@@ -80,7 +84,7 @@ public class BigQuerySourceEnumerator
 
     @Override
     public void start() {
-        splitAssigner.openAndDiscoverSplits();
+        maybeStart();
     }
 
     @Override
@@ -91,7 +95,9 @@ public class BigQuerySourceEnumerator
         }
 
         readersAwaitingSplit.add(subtaskId);
-        assignSplits();
+        if (maybeStart()) {
+            assignSplits();
+        }
     }
 
     @Override
@@ -107,6 +113,9 @@ public class BigQuerySourceEnumerator
     @Override
     public void addReader(int subtaskId) {
         LOG.debug("Adding reader {} to BigQuerySourceEnumerator.", subtaskId);
+        if (maybeStart()) {
+            assignSplits();
+        }
     }
 
     @Override
@@ -163,6 +172,36 @@ public class BigQuerySourceEnumerator
 
     @Override
     public void notifySplits() {
-        assignSplits();
+        if (maybeStart()) {
+            assignSplits();
+        }
+    }
+
+    private boolean maybeStart() {
+        if (started) {
+            return true;
+        }
+
+        int registeredReaders = context.registeredReaders().size();
+        int expectedReaders = context.currentParallelism();
+        if (waitForAllSourceReaders && registeredReaders < expectedReaders) {
+            LOG.debug(
+                    "Waiting to start BigQuery Source Enumerator until all source readers are "
+                            + "registered ({}/{}).",
+                    registeredReaders,
+                    expectedReaders);
+            return false;
+        }
+
+        if (waitForAllSourceReaders) {
+            LOG.info(
+                    "Starting BigQuery Source Enumerator after all source readers are registered "
+                            + "({}/{}).",
+                    registeredReaders,
+                    expectedReaders);
+        }
+        splitAssigner.openAndDiscoverSplits();
+        started = true;
+        return true;
     }
 }

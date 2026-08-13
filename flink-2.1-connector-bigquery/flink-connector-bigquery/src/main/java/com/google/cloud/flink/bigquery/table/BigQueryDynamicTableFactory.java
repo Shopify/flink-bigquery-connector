@@ -68,6 +68,7 @@ public class BigQueryDynamicTableFactory
         additionalOptions.add(BigQueryConnectorOptions.ROW_RESTRICTION);
         additionalOptions.add(BigQueryConnectorOptions.COLUMNS_PROJECTION);
         additionalOptions.add(BigQueryConnectorOptions.MAX_STREAM_COUNT);
+        additionalOptions.add(BigQueryConnectorOptions.WAIT_FOR_ALL_SOURCE_READERS);
         additionalOptions.add(BigQueryConnectorOptions.SNAPSHOT_TIMESTAMP);
         additionalOptions.add(BigQueryConnectorOptions.CREDENTIALS_ACCESS_TOKEN);
         additionalOptions.add(BigQueryConnectorOptions.CREDENTIALS_FILE);
@@ -107,6 +108,7 @@ public class BigQueryDynamicTableFactory
         forwardOptions.add(BigQueryConnectorOptions.ROW_RESTRICTION);
         forwardOptions.add(BigQueryConnectorOptions.COLUMNS_PROJECTION);
         forwardOptions.add(BigQueryConnectorOptions.MAX_STREAM_COUNT);
+        forwardOptions.add(BigQueryConnectorOptions.WAIT_FOR_ALL_SOURCE_READERS);
         forwardOptions.add(BigQueryConnectorOptions.SNAPSHOT_TIMESTAMP);
         forwardOptions.add(BigQueryConnectorOptions.CREDENTIALS_ACCESS_TOKEN);
         forwardOptions.add(BigQueryConnectorOptions.CREDENTIALS_FILE);

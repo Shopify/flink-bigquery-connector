@@ -95,6 +95,7 @@ public class BigQueryDynamicTableFactoryTest {
         Map<String, String> properties = getRequiredOptions();
         properties.put(BigQueryConnectorOptions.COLUMNS_PROJECTION.key(), "aaa,bbb");
         properties.put(BigQueryConnectorOptions.MAX_STREAM_COUNT.key(), "100");
+        properties.put(BigQueryConnectorOptions.WAIT_FOR_ALL_SOURCE_READERS.key(), "true");
         properties.put(
                 BigQueryConnectorOptions.ROW_RESTRICTION.key(), "aaa > 10 AND NOT bbb IS NULL");
         properties.put(
@@ -110,6 +111,7 @@ public class BigQueryDynamicTableFactoryTest {
                         .setMaxStreamCount(100)
                         .setRowRestriction("aaa > 10 AND NOT bbb IS NULL")
                         .setSnapshotTimestampInMillis(Instant.EPOCH.toEpochMilli())
+                        .setWaitForAllSourceReaders(true)
                         .setBigQueryConnectOptions(connectorOptions.getBigQueryConnectOptions())
                         .build();
 
