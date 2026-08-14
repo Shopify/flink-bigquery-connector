@@ -40,12 +40,104 @@ public class BigQuerySourceEnumeratorTest {
 
     @Before
     public void beforeTest() throws IOException {
+        StorageClientFaker.FakeBigQueryServices.STORAGE_READ_CLIENT_INVOCATIONS.set(0);
         this.readOptions =
                 StorageClientFaker.createReadOptions(
                                 0, 2, StorageClientFaker.SIMPLE_AVRO_SCHEMA_STRING)
                         .toBuilder()
                         .setParallelism(1)
                         .build();
+    }
+
+    @Test
+    public void startOpensReadSessionWithoutWaitingByDefault() throws Exception {
+        try (MockSplitEnumeratorContext<BigQuerySourceSplit> ctx =
+                new MockSplitEnumeratorContext<>(2)) {
+            BigQuerySourceEnumerator enumerator =
+                    new BigQuerySourceEnumerator(
+                            Boundedness.BOUNDED,
+                            ctx,
+                            readOptions,
+                            BigQuerySourceEnumState.initialState());
+
+            enumerator.start();
+
+            assertThat(storageReadClientInvocations()).isEqualTo(1);
+        }
+    }
+
+    @Test
+    public void startWaitsForAllReadersBeforeOpeningReadSession() throws Exception {
+        try (MockSplitEnumeratorContext<BigQuerySourceSplit> ctx =
+                new MockSplitEnumeratorContext<>(2)) {
+            BigQuerySourceEnumerator enumerator =
+                    new BigQuerySourceEnumerator(
+                            Boundedness.BOUNDED,
+                            ctx,
+                            readOptionsWaitingForAllReaders(),
+                            BigQuerySourceEnumState.initialState());
+
+            enumerator.start();
+            assertThat(storageReadClientInvocations()).isEqualTo(0);
+
+            ctx.registerReader(new ReaderInfo(0, host(0)));
+            enumerator.addReader(0);
+            assertThat(storageReadClientInvocations()).isEqualTo(0);
+
+            ctx.registerReader(new ReaderInfo(1, host(1)));
+            enumerator.addReader(1);
+            assertThat(storageReadClientInvocations()).isEqualTo(1);
+        }
+    }
+
+    @Test
+    public void splitRequestsBeforeStartupAreAssignedAfterAllReadersRegister() throws Exception {
+        try (MockSplitEnumeratorContext<BigQuerySourceSplit> ctx =
+                new MockSplitEnumeratorContext<>(2)) {
+            BigQuerySourceEnumerator enumerator =
+                    new BigQuerySourceEnumerator(
+                            Boundedness.BOUNDED,
+                            ctx,
+                            readOptionsWaitingForAllReaders(),
+                            BigQuerySourceEnumState.initialState());
+
+            enumerator.start();
+            ctx.registerReader(new ReaderInfo(0, host(0)));
+            enumerator.addReader(0);
+            enumerator.handleSplitRequest(0, host(0));
+
+            assertThat(ctx.getSplitsAssignmentSequence()).isEmpty();
+
+            ctx.registerReader(new ReaderInfo(1, host(1)));
+            enumerator.addReader(1);
+
+            assertThat(ctx.getSplitsAssignmentSequence()).hasSize(1);
+            SplitsAssignment<BigQuerySourceSplit> assignment =
+                    ctx.getSplitsAssignmentSequence().get(0);
+            assertThat(assignment.assignment()).containsKey(0);
+        }
+    }
+
+    @Test
+    public void restoredStateDoesNotWaitForAllReadersBeforeAssigningSplits() throws Exception {
+        BigQuerySourceEnumState seed = seedWithOneRemainingStream();
+
+        try (MockSplitEnumeratorContext<BigQuerySourceSplit> ctx =
+                new MockSplitEnumeratorContext<>(2)) {
+            BigQuerySourceEnumerator enumerator =
+                    new BigQuerySourceEnumerator(
+                            Boundedness.BOUNDED, ctx, readOptionsWaitingForAllReaders(), seed);
+
+            enumerator.start();
+            ctx.registerReader(new ReaderInfo(0, host(0)));
+            enumerator.addReader(0);
+            enumerator.handleSplitRequest(0, host(0));
+
+            assertThat(ctx.getSplitsAssignmentSequence()).hasSize(1);
+            SplitsAssignment<BigQuerySourceSplit> assignment =
+                    ctx.getSplitsAssignmentSequence().get(0);
+            assertThat(assignment.assignment()).containsKey(0);
+        }
     }
 
     @Test
@@ -113,6 +205,14 @@ public class BigQuerySourceEnumeratorTest {
 
     private static String host(int subtaskId) {
         return "host-" + subtaskId;
+    }
+
+    private static int storageReadClientInvocations() {
+        return StorageClientFaker.FakeBigQueryServices.STORAGE_READ_CLIENT_INVOCATIONS.get();
+    }
+
+    private BigQueryReadOptions readOptionsWaitingForAllReaders() {
+        return readOptions.toBuilder().setWaitForAllSourceReaders(true).build();
     }
 
     private BigQuerySourceEnumState seedWithOneRemainingStream() {

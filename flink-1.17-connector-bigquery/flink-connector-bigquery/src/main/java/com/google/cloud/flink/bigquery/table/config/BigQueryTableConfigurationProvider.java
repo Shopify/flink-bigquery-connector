@@ -106,6 +106,8 @@ public class BigQueryTableConfigurationProvider {
                         Optional.ofNullable(config.get(BigQueryConnectorOptions.COLUMNS_PROJECTION))
                                 .map(cols -> Arrays.asList(cols.split(",")))
                                 .orElse(new ArrayList<>()))
+                .setWaitForAllSourceReaders(
+                        config.get(BigQueryConnectorOptions.WAIT_FOR_ALL_SOURCE_READERS))
                 .setBigQueryConnectOptions(translateBigQueryConnectOptions())
                 .setLimit(config.get(BigQueryConnectorOptions.LIMIT))
                 .build();
