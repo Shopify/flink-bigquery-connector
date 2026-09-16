@@ -537,9 +537,12 @@ public class BigQueryServicesImpl implements BigQueryServices {
 
             BigQuery materializedBigQuery = bigQuery;
             if (billingProject != null) {
+                // BigQuery#create uses the client's project when JobInfo has no explicit JobId.
+                // QuotaProjectId alone controls quota attribution, not the job's project.
                 materializedBigQuery =
                         bigQuery.getOptions()
                                 .toBuilder()
+                                .setProjectId(billingProject)
                                 .setQuotaProjectId(billingProject)
                                 .build()
                                 .getService();

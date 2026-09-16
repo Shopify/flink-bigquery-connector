@@ -17,6 +17,8 @@
 package com.google.cloud.flink.bigquery.services;
 
 import com.google.cloud.bigquery.BigQuery;
+import com.google.cloud.bigquery.BigQueryException;
+import com.google.cloud.bigquery.BigQueryOptions;
 import com.google.cloud.bigquery.Job;
 import com.google.cloud.bigquery.JobConfiguration;
 import com.google.cloud.bigquery.JobId;
@@ -34,6 +36,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -62,6 +65,47 @@ public class BigQueryServicesImplTest {
         return LoadJobConfiguration.newBuilder(
                         TableId.of("p", "d", "t"), Collections.singletonList("gs://bucket/a.avro"))
                 .build();
+    }
+
+    @Test
+    public void materializeViewUsesBillingProjectAsJobProject() throws Exception {
+        BigQuery defaultBigQuery = mock(BigQuery.class);
+        BigQueryOptions defaultOptions = mock(BigQueryOptions.class);
+        BigQueryOptions.Builder materializationOptionsBuilder = mock(BigQueryOptions.Builder.class);
+        BigQueryOptions materializationOptions = mock(BigQueryOptions.class);
+        BigQuery materializationBigQuery = mock(BigQuery.class);
+
+        when(defaultBigQuery.getOptions()).thenReturn(defaultOptions);
+        when(defaultOptions.toBuilder()).thenReturn(materializationOptionsBuilder);
+        when(materializationOptionsBuilder.setProjectId("billing-project"))
+                .thenReturn(materializationOptionsBuilder);
+        when(materializationOptionsBuilder.setQuotaProjectId("billing-project"))
+                .thenReturn(materializationOptionsBuilder);
+        when(materializationOptionsBuilder.build()).thenReturn(materializationOptions);
+        when(materializationOptions.getService()).thenReturn(materializationBigQuery);
+        when(materializationBigQuery.create(any(JobInfo.class)))
+                .thenThrow(new BigQueryException(500, "stop after job submission"));
+
+        BigQueryServicesImpl.QueryDataClientImpl client =
+                newClientWithMockBigQuery(defaultBigQuery);
+
+        assertThrows(
+                RuntimeException.class,
+                () ->
+                        client.materializeView(
+                                "source-project",
+                                "source-dataset",
+                                "source-view",
+                                Collections.emptyList(),
+                                null,
+                                24,
+                                "materialization-project",
+                                "materialization-dataset",
+                                "billing-project"));
+
+        verify(materializationOptionsBuilder).setProjectId("billing-project");
+        verify(materializationOptionsBuilder).setQuotaProjectId("billing-project");
+        verify(materializationBigQuery).create(any(JobInfo.class));
     }
 
     @Test
