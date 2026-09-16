@@ -262,10 +262,17 @@ public class BigQueryConnectorOptions {
                     .defaultValue(24)
                     .withDescription("Expiration hours for the materialized temporary table.");
 
-    /** [OPTIONAL, Read Configuration] GCP project under which the materialization job is billed. */
+    /**
+     * [OPTIONAL, Read Configuration] GCP project under which the view materialization job is
+     * submitted i.e. where the job is listed and billed. Defaults to the project where the
+     * temporary table is materialized ({@link #MATERIALIZATION_PROJECT}.
+     */
     public static final ConfigOption<String> BILLING_PROJECT =
             ConfigOptions.key("read.views.billing-project")
                     .stringType()
                     .noDefaultValue()
-                    .withDescription("GCP project under which the materialization job is billed.");
+                    .withDescription(
+                            "GCP project under which the view materialization job is submitted "
+                                    + "i.e. where the job is listed and billed. Defaults to "
+                                    + "the project where the temporary table is materialized.");
 }

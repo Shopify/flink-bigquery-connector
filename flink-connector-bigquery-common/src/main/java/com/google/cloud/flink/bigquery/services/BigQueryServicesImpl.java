@@ -18,6 +18,7 @@ package com.google.cloud.flink.bigquery.services;
 
 import org.apache.flink.FlinkVersion;
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.StringUtils;
 
 import com.google.api.gax.core.FixedCredentialsProvider;
@@ -498,18 +499,23 @@ public class BigQueryServicesImpl implements BigQueryServices {
         public String materializeView(
                 String project,
                 String dataset,
-                String table,
+                String view,
                 List<String> selectedFields,
                 String rowRestriction,
                 Integer expirationHours,
                 String materializationProject,
                 String materializationDataset,
                 String billingProject) {
-            String destinationTableName = "_bqc_" + UUID.randomUUID().toString().replace("-", "");
+            Preconditions.checkArgument(
+                    materializationProject != null, "materializationProject must not be null.");
+            Preconditions.checkArgument(
+                    materializationDataset != null, "materializationDataset must not be null.");
+            Preconditions.checkArgument(billingProject != null, "billingProject must not be null.");
 
-            String destProject = materializationProject != null ? materializationProject : project;
-            String destDataset = materializationDataset != null ? materializationDataset : dataset;
-            TableId destinationTableId = TableId.of(destProject, destDataset, destinationTableName);
+            String destinationTableName = "_bqc_" + UUID.randomUUID().toString().replace("-", "");
+            TableId destinationTableId =
+                    TableId.of(
+                            materializationProject, materializationDataset, destinationTableName);
 
             String columns =
                     selectedFields.isEmpty()
@@ -526,7 +532,7 @@ public class BigQueryServicesImpl implements BigQueryServices {
             String query =
                     String.format(
                             "SELECT %s FROM `%s.%s.%s` %s",
-                            columns, project, dataset, table, whereClause);
+                            columns, project, dataset, view, whereClause);
 
             QueryJobConfiguration.Builder queryConfigBuilder =
                     QueryJobConfiguration.newBuilder(query)
@@ -535,35 +541,21 @@ public class BigQueryServicesImpl implements BigQueryServices {
                                     com.google.cloud.bigquery.JobInfo.WriteDisposition
                                             .WRITE_TRUNCATE);
 
-            BigQuery materializedBigQuery = bigQuery;
-            if (billingProject != null) {
-                materializedBigQuery =
-                        bigQuery.getOptions()
-                                .toBuilder()
-                                .setQuotaProjectId(billingProject)
-                                .build()
-                                .getService();
-                LOG.info(
-                        "Materializing view {} via custom billing project: {}",
-                        table,
-                        billingProject);
-            }
-
             QueryJobConfiguration queryConfig = queryConfigBuilder.build();
 
             try {
-                com.google.cloud.bigquery.Job job =
-                        materializedBigQuery.create(
-                                com.google.cloud.bigquery.JobInfo.of(queryConfig));
+                LOG.info("Materializing view {} via job project: {}", view, billingProject);
+                Job job =
+                        submitJob(
+                                billingProject, "materialize" + destinationTableName, queryConfig);
                 job.waitFor();
 
-                // Set expiration time for the temp table using the correct billing context
+                // Set expiration time for the temp table.
                 com.google.cloud.bigquery.Table createdTable =
-                        materializedBigQuery.getTable(destinationTableId);
+                        bigQuery.getTable(destinationTableId);
                 long expirationTime =
                         createdTable.getCreationTime() + TimeUnit.HOURS.toMillis(expirationHours);
-                materializedBigQuery.update(
-                        createdTable.toBuilder().setExpirationTime(expirationTime).build());
+                bigQuery.update(createdTable.toBuilder().setExpirationTime(expirationTime).build());
 
                 return destinationTableName;
             } catch (InterruptedException e) {

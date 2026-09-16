@@ -208,6 +208,8 @@ public class SplitDiscovererTest {
         assertThat(fakeServices.materializeViewCalled).isTrue();
         assertThat(fakeServices.lastMatProject).isEqualTo("custom-project");
         assertThat(fakeServices.lastMatDataset).isEqualTo("custom_dataset");
+        // billingProject defaults to the materialization project.
+        assertThat(fakeServices.lastBillingProject).isEqualTo("custom-project");
     }
 
     @Test
@@ -238,6 +240,35 @@ public class SplitDiscovererTest {
         assertThat(splits).containsExactly("stream_temp");
         assertThat(fakeServices.materializeViewCalled).isTrue();
         assertThat(fakeServices.lastBillingProject).isEqualTo("billing-project");
+    }
+
+    @Test
+    public void testDiscoverSplitsViewDefaultJobProject() {
+        fakeServices.isView = true;
+        fakeServices.materializedTableName = "temp_table";
+        fakeServices.readSession =
+                ReadSession.newBuilder()
+                        .addStreams(ReadStream.newBuilder().setName("stream_temp").build())
+                        .build();
+
+        BigQueryConnectOptions optionsWithViews = options.toBuilder().setViewsEnabled(true).build();
+
+        List<String> splits =
+                SplitDiscoverer.discoverSplits(
+                        optionsWithViews,
+                        DataFormat.AVRO,
+                        Collections.emptyList(),
+                        null,
+                        Optional.empty(),
+                        null,
+                        null);
+
+        assertThat(splits).containsExactly("stream_temp");
+        assertThat(fakeServices.materializeViewCalled).isTrue();
+        // Everything defaults to the source view's project and dataset.
+        assertThat(fakeServices.lastMatProject).isEqualTo("project");
+        assertThat(fakeServices.lastMatDataset).isEqualTo("dataset");
+        assertThat(fakeServices.lastBillingProject).isEqualTo("project");
     }
 
     static class FakeBigQueryServices implements BigQueryServices {

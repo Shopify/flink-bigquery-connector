@@ -17,11 +17,13 @@
 package com.google.cloud.flink.bigquery.services;
 
 import com.google.cloud.bigquery.BigQuery;
+import com.google.cloud.bigquery.BigQueryException;
 import com.google.cloud.bigquery.Job;
 import com.google.cloud.bigquery.JobConfiguration;
 import com.google.cloud.bigquery.JobId;
 import com.google.cloud.bigquery.JobInfo;
 import com.google.cloud.bigquery.LoadJobConfiguration;
+import com.google.cloud.bigquery.QueryJobConfiguration;
 import com.google.cloud.bigquery.TableId;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -34,7 +36,10 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -62,6 +67,105 @@ public class BigQueryServicesImplTest {
         return LoadJobConfiguration.newBuilder(
                         TableId.of("p", "d", "t"), Collections.singletonList("gs://bucket/a.avro"))
                 .build();
+    }
+
+    @Test
+    public void materializeViewSubmitsJobUnderBillingProject() throws Exception {
+        BigQuery bq = mock(BigQuery.class);
+        when(bq.create(any(JobInfo.class)))
+                .thenThrow(new BigQueryException(500, "stop after job submission"));
+
+        BigQueryServicesImpl.QueryDataClientImpl client = newClientWithMockBigQuery(bq);
+
+        assertThrows(
+                RuntimeException.class,
+                () ->
+                        client.materializeView(
+                                "source-project",
+                                "source-dataset",
+                                "source-view",
+                                Collections.emptyList(),
+                                null,
+                                24,
+                                "materialization-project",
+                                "materialization-dataset",
+                                "billing-project"));
+
+        ArgumentCaptor<JobInfo> jobInfoCaptor = ArgumentCaptor.forClass(JobInfo.class);
+        verify(bq).create(jobInfoCaptor.capture());
+        JobId jobId = jobInfoCaptor.getValue().getJobId();
+        assertEquals("billing-project", jobId.getProject());
+        assertTrue(jobId.getJob().startsWith("materialize_bqc_"));
+
+        QueryJobConfiguration config = jobInfoCaptor.getValue().getConfiguration();
+        assertEquals("materialization-project", config.getDestinationTable().getProject());
+        assertEquals("materialization-dataset", config.getDestinationTable().getDataset());
+    }
+
+    @Test
+    public void materializeViewRequiresBillingProject() throws Exception {
+        BigQuery bq = mock(BigQuery.class);
+
+        BigQueryServicesImpl.QueryDataClientImpl client = newClientWithMockBigQuery(bq);
+
+        IllegalArgumentException error =
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () ->
+                                client.materializeView(
+                                        "source-project",
+                                        "source-dataset",
+                                        "source-view",
+                                        Collections.emptyList(),
+                                        null,
+                                        24,
+                                        "materialization-project",
+                                        "materialization-dataset",
+                                        null));
+
+        assertTrue(error.getMessage().contains("billingProject must not be null"));
+        verify(bq, never()).create(any(JobInfo.class));
+    }
+
+    @Test
+    public void materializeViewRequiresMaterializationProjectAndDataset() throws Exception {
+        BigQuery bq = mock(BigQuery.class);
+
+        BigQueryServicesImpl.QueryDataClientImpl client = newClientWithMockBigQuery(bq);
+
+        IllegalArgumentException missingProject =
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () ->
+                                client.materializeView(
+                                        "source-project",
+                                        "source-dataset",
+                                        "source-view",
+                                        Collections.emptyList(),
+                                        null,
+                                        24,
+                                        null,
+                                        "materialization-dataset",
+                                        "billing-project"));
+        assertTrue(missingProject.getMessage().contains("materializationProject must not be null"));
+
+        IllegalArgumentException missingDataset =
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () ->
+                                client.materializeView(
+                                        "source-project",
+                                        "source-dataset",
+                                        "source-view",
+                                        Collections.emptyList(),
+                                        null,
+                                        24,
+                                        "materialization-project",
+                                        null,
+                                        "billing-project"));
+        assertTrue(missingDataset.getMessage().contains("materializationDataset must not be null"));
+
+        verify(bq, never()).create(any(JobInfo.class));
     }
 
     @Test
